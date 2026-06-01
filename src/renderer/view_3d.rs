@@ -178,25 +178,25 @@ impl View3D {
             let depth = (v0.z + v1.z + v2.z + v3.z) / 4.0;
             quads.push(FaceQuad { verts: [v0, v1, v2, v3], color, depth });
         }
-        // +Z (F)
+        // +Z (F) —— 顶点顺序需保证法向量朝 +Z
         if pos.z > 0.5 {
             let c = cube.faces[Face::F as usize][iy][ix]; // F 面 row=iy, col=ix
             let color = c.as_egui();
             let v0 = Vec3::new(pos.x - s, pos.y - s, pos.z + s).rotate_y(self.view_rot_y).rotate_x(self.view_rot_x);
-            let v1 = Vec3::new(pos.x - s, pos.y + s, pos.z + s).rotate_y(self.view_rot_y).rotate_x(self.view_rot_x);
+            let v1 = Vec3::new(pos.x + s, pos.y - s, pos.z + s).rotate_y(self.view_rot_y).rotate_x(self.view_rot_x);
             let v2 = Vec3::new(pos.x + s, pos.y + s, pos.z + s).rotate_y(self.view_rot_y).rotate_x(self.view_rot_x);
-            let v3 = Vec3::new(pos.x + s, pos.y - s, pos.z + s).rotate_y(self.view_rot_y).rotate_x(self.view_rot_x);
+            let v3 = Vec3::new(pos.x - s, pos.y + s, pos.z + s).rotate_y(self.view_rot_y).rotate_x(self.view_rot_x);
             let depth = (v0.z + v1.z + v2.z + v3.z) / 4.0;
             quads.push(FaceQuad { verts: [v0, v1, v2, v3], color, depth });
         }
-        // -Z (B)
+        // -Z (B) —— 顶点顺序需保证法向量朝 -Z
         if pos.z < -0.5 {
             let c = cube.faces[Face::B as usize][iy][2 - ix]; // B 面 row=iy, col=2-ix
             let color = c.as_egui();
             let v0 = Vec3::new(pos.x + s, pos.y - s, pos.z - s).rotate_y(self.view_rot_y).rotate_x(self.view_rot_x);
-            let v1 = Vec3::new(pos.x + s, pos.y + s, pos.z - s).rotate_y(self.view_rot_y).rotate_x(self.view_rot_x);
+            let v1 = Vec3::new(pos.x - s, pos.y - s, pos.z - s).rotate_y(self.view_rot_y).rotate_x(self.view_rot_x);
             let v2 = Vec3::new(pos.x - s, pos.y + s, pos.z - s).rotate_y(self.view_rot_y).rotate_x(self.view_rot_x);
-            let v3 = Vec3::new(pos.x - s, pos.y - s, pos.z - s).rotate_y(self.view_rot_y).rotate_x(self.view_rot_x);
+            let v3 = Vec3::new(pos.x + s, pos.y + s, pos.z - s).rotate_y(self.view_rot_y).rotate_x(self.view_rot_x);
             let depth = (v0.z + v1.z + v2.z + v3.z) / 4.0;
             quads.push(FaceQuad { verts: [v0, v1, v2, v3], color, depth });
         }
