@@ -85,6 +85,12 @@ impl View3D {
         // 绘制
         let painter = ui.painter();
         for q in quads {
+            // 用旋转后的 3D 法向量做背面剔除：z > 0 表示面朝向我们
+            let normal = compute_normal(&q.verts);
+            if normal.z <= 0.0 {
+                continue;
+            }
+
             let points: Vec<Pos2> = q
                 .verts
                 .iter()
@@ -94,25 +100,21 @@ impl View3D {
                 })
                 .collect();
 
-            // 背面剔除：如果四边形是顺时针的，说明是背面
-            if !is_backface(&points) {
-                // 简单的光照：根据法向量与光源方向点积调整颜色
-                let normal = compute_normal(&q.verts);
-                let light = Vec3::new(0.3, 0.5, 0.8); // 光源方向
-                let intensity = 0.6
-                    + 0.4
-                        * ((normal.x * light.x + normal.y * light.y + normal.z * light.z)
-                            / (light.x * light.x + light.y * light.y + light.z * light.z).sqrt())
-                            .max(0.0);
+            // 简单的光照：根据法向量与光源方向点积调整颜色
+            let light = Vec3::new(0.3, 0.5, 0.8); // 光源方向
+            let intensity = 0.6
+                + 0.4
+                    * ((normal.x * light.x + normal.y * light.y + normal.z * light.z)
+                        / (light.x * light.x + light.y * light.y + light.z * light.z).sqrt())
+                        .max(0.0);
 
-                let lit_color = apply_lighting(q.color, intensity);
+            let lit_color = apply_lighting(q.color, intensity);
 
-                painter.add(Shape::convex_polygon(
-                    points.clone(),
-                    lit_color,
-                    egui::Stroke::new(1.0, Color32::BLACK),
-                ));
-            }
+            painter.add(Shape::convex_polygon(
+                points.clone(),
+                lit_color,
+                egui::Stroke::new(1.0, Color32::BLACK),
+            ));
         }
 
         // 点击检测：检测点击了哪个外层面
@@ -235,18 +237,6 @@ impl View3D {
 
         best.map(|(f, _)| f)
     }
-}
-
-fn is_backface(points: &[Pos2]) -> bool {
-    if points.len() < 3 {
-        return false;
-    }
-    let mut area = 0.0;
-    for i in 0..points.len() {
-        let j = (i + 1) % points.len();
-        area += (points[j].x - points[i].x) * (points[j].y + points[i].y);
-    }
-    area > 0.0 // egui y 轴向下，顺时针面积 > 0 表示背面
 }
 
 fn compute_normal(verts: &[Vec3]) -> Vec3 {
