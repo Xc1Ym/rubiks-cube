@@ -2,6 +2,12 @@
 name = "rubiks-cube"
 version = "0.1.0"
 edition = "2024"
+authors = ["ligong"]
+description = "An interactive Rubik's Cube simulator with 3D and 2D views"
+repository = "https://github.com/ligong/rubiks-cube"
+license = "MIT"
+keywords = ["rubiks-cube", "gui", "egui", "puzzle", "simulator"]
+categories = ["games", "graphics"]
 
 [dependencies]
 eframe = "0.30"
@@ -10,3 +16,9 @@ rand = "0.8"
 
 [profile.release]
 opt-level = 3
+lto = true
+strip = true
+
+[[bin]]
+name = "rubiks-cube"
+path = "src/main.rs"
