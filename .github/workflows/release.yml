@@ -1,10 +1,12 @@
-name: Release
+name: CI & Release
 
 on:
   push:
+    branches: ['**']
     tags:
       - 'v*'
-  workflow_dispatch:
+  pull_request:
+    branches: ['**']
 
 permissions:
   contents: write
@@ -105,10 +107,12 @@ jobs:
           name: windows-arm64
           path: rubiks-cube-windows-arm64.zip
 
+  # ── 只在推送 tag 时创建 GitHub Release ──
   release:
     name: Create GitHub Release
     needs: [build-macos-arm64, build-windows-x64, build-windows-arm64]
     runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
     steps:
       - uses: actions/checkout@v4
 
