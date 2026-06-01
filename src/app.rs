@@ -1,36 +1,42 @@
 use crate::cube::moves::{parse_moves, scramble_moves, Face, Move};
 use crate::cube::Cube;
 use crate::renderer::view_2d::NetRenderer;
-use crate::renderer::view_3d::View3D;
+use crate::renderer::view_3d::{RotationAnim, View3D};
 use egui::{Color32, RichText};
 
-/// 动画状态
+/// 动画状态 —— 支持单步旋转插值动画
 #[derive(Clone, Debug)]
 struct Animation {
-    moves: Vec<Move>,
-    current_index: usize,
-    timer: f32,
-    speed: f32, // 秒/步
+    moves: Vec<Move>,       // 待执行的 move 队列
+    current: usize,         // 当前正在播放第几个
+    progress: f32,          // 当前旋转动画进度 0.0 ~ 1.0
+    speed: f32,             // 每秒进度（如 4.0 表示 1/4 秒完成一步）
 }
 
 impl Animation {
     fn is_running(&self) -> bool {
-        self.current_index < self.moves.len()
+        self.current < self.moves.len()
     }
 
-    fn tick(&mut self, dt: f32) -> Option<Move> {
+    /// 每帧更新，返回是否需要持续重绘，以及当前旋转状态
+    fn tick(&mut self, dt: f32) -> (bool, Option<(Move, f32)>) {
         if !self.is_running() {
-            return None;
+            return (false, None);
         }
-        self.timer += dt;
-        if self.timer >= self.speed {
-            self.timer -= self.speed;
-            let mv = self.moves[self.current_index];
-            self.current_index += 1;
-            Some(mv)
-        } else {
-            None
+        self.progress += dt * self.speed;
+        if self.progress >= 1.0 {
+            // 当前 move 动画完成，返回 1.0 让上层 apply_move
+            let mv = self.moves[self.current];
+            self.progress = 1.0;
+            return (true, Some((mv, 1.0)));
         }
+        (true, Some((self.moves[self.current], self.progress)))
+    }
+
+    /// 当前 move 动画已应用后，推进到下一个
+    fn advance(&mut self) {
+        self.current += 1;
+        self.progress = 0.0;
     }
 }
 
@@ -84,23 +90,25 @@ impl CubeApp {
         self.redo_stack.clear();
     }
 
-    fn apply_move(&mut self, mv: Move) {
+    /// 排队执行一个 Move（带动画）
+    fn enqueue_move(&mut self, mv: Move) {
         self.push_history();
-        self.cube.apply_move(&mv);
+        self.start_animation(vec![mv]);
         self.status_message = format!("执行: {}", mv.notation());
     }
 
-    fn apply_moves(&mut self, moves: Vec<Move>) {
+    /// 排队执行多个 Move（带动画）
+    fn enqueue_moves(&mut self, moves: Vec<Move>) {
         if moves.is_empty() {
             return;
         }
         self.push_history();
-        self.cube.apply_moves(&moves);
-        let notations: Vec<String> = moves.iter().map(|m| m.notation()).collect();
-        self.status_message = format!("执行序列: {}", notations.join(" "));
+        self.start_animation(moves);
+        self.status_message = "播放动画序列...".to_string();
     }
 
     fn undo(&mut self) {
+        self.cancel_animation();
         if self.history.len() > 1 {
             let current = self.cube.clone();
             self.redo_stack.push(current);
@@ -111,6 +119,7 @@ impl CubeApp {
     }
 
     fn redo(&mut self) {
+        self.cancel_animation();
         if let Some(cube) = self.redo_stack.pop() {
             self.history.push(cube.clone());
             self.cube = cube;
@@ -119,6 +128,7 @@ impl CubeApp {
     }
 
     fn reset(&mut self) {
+        self.cancel_animation();
         self.push_history();
         self.cube = Cube::solved();
         self.status_message = "魔方已重置".to_string();
@@ -126,25 +136,31 @@ impl CubeApp {
 
     fn scramble(&mut self) {
         let moves = scramble_moves(self.scramble_count);
+        self.push_history();
         self.start_animation(moves);
         self.status_message = format!("打乱 {} 步", self.scramble_count);
     }
 
     fn start_animation(&mut self, moves: Vec<Move>) {
+        // speed = 1.0 / duration，duration 是当前 anim_speed（秒/步）
+        let speed = 1.0 / self.anim_speed.max(0.02);
         self.animation = Some(Animation {
             moves,
-            current_index: 0,
-            timer: 0.0,
-            speed: self.anim_speed,
+            current: 0,
+            progress: 0.0,
+            speed,
         });
+    }
+
+    fn cancel_animation(&mut self) {
+        self.animation = None;
     }
 
     fn run_formula(&mut self) {
         match parse_moves(&self.formula_input) {
             Ok(moves) => {
                 if !moves.is_empty() {
-                    self.start_animation(moves);
-                    self.status_message = "播放公式...".to_string();
+                    self.enqueue_moves(moves);
                 }
             }
             Err(e) => {
@@ -156,22 +172,42 @@ impl CubeApp {
 
 impl eframe::App for CubeApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        // 处理动画
-        if let Some(ref mut anim) = self.animation {
-            if anim.is_running() {
-                ctx.request_repaint_after(std::time::Duration::from_millis(16));
-            }
-        }
-
-        // 动画 tick
         let dt = ctx.input(|i| i.stable_dt);
+
+        // ── 动画 tick ──
+        // 当前旋转动画状态（用于 3D 渲染插值）
+        let mut current_rotation: Option<RotationAnim> = None;
+
         if let Some(ref mut anim) = self.animation {
-            if let Some(mv) = anim.tick(dt) {
-                self.cube.apply_move(&mv);
+            let (need_repaint, rot_state) = anim.tick(dt);
+            if need_repaint {
+                ctx.request_repaint_after(std::time::Duration::from_millis(8));
             }
-            if !anim.is_running() {
-                self.animation = None;
-                self.status_message = "动画完成".to_string();
+            if let Some((mv, progress)) = rot_state {
+                let target = if mv.double {
+                    std::f32::consts::PI
+                } else {
+                    std::f32::consts::FRAC_PI_2
+                };
+                // 顺时针 = 负角度（右手定则）
+                let sign = if mv.clockwise { -1.0 } else { 1.0 };
+                current_rotation = Some(RotationAnim {
+                    face: mv.face,
+                    angle: progress * target * sign,
+                });
+
+                // 动画完成时真正提交魔方状态变更
+                if progress >= 1.0 {
+                    self.cube.apply_move(&mv);
+                    anim.advance();
+                    if anim.is_running() {
+                        self.status_message =
+                            format!("执行: {}", anim.moves[anim.current].notation());
+                    } else {
+                        self.animation = None;
+                        self.status_message = "动画完成".to_string();
+                    }
+                }
             }
         }
 
@@ -197,12 +233,15 @@ impl eframe::App for CubeApp {
                 if self.show_3d {
                     ui.vertical(|ui| {
                         ui.label("3D 视图（拖拽旋转视角，点击面旋转）");
-                        let clicked_face = self.view_3d.show(ui, &self.cube);
-                        if let Some(face) = clicked_face {
-                            if ui.input(|i| i.modifiers.shift) {
-                                self.apply_move(Move::new(face, false, false));
-                            } else {
-                                self.apply_move(Move::new(face, true, false));
+                        let clicked_face = self.view_3d.show(ui, &self.cube, current_rotation);
+                        // 动画播放期间禁用点击操作
+                        if self.animation.is_none() {
+                            if let Some(face) = clicked_face {
+                                if ui.input(|i| i.modifiers.shift) {
+                                    self.enqueue_move(Move::new(face, false, false));
+                                } else {
+                                    self.enqueue_move(Move::new(face, true, false));
+                                }
                             }
                         }
                     });
@@ -212,10 +251,13 @@ impl eframe::App for CubeApp {
                 // 2D 展开图
                 ui.vertical(|ui| {
                     ui.label("2D 展开图（点击色块选择面）");
-                    if let Some(click) = self.net_renderer.show(ui, &self.cube) {
-                        // 点击展开图时，根据点击位置决定旋转方向
-                        // 简化：点击直接顺时针旋转该面
-                        self.apply_move(Move::new(click.face, true, false));
+                    if self.animation.is_none() {
+                        if let Some(click) = self.net_renderer.show(ui, &self.cube) {
+                            self.enqueue_move(Move::new(click.face, true, false));
+                        }
+                    } else {
+                        // 动画期间只显示，不响应点击
+                        self.net_renderer.show(ui, &self.cube);
                     }
                 });
             });
@@ -226,15 +268,25 @@ impl eframe::App for CubeApp {
             ui.group(|ui| {
                 ui.label("控制面板");
 
+                // 动画播放期间禁用按钮，避免状态混乱
+                let busy = self.animation.is_some();
+
                 // 手动旋转按钮
                 ui.horizontal(|ui| {
                     ui.label("单步旋转:");
                     for face in Face::ALL {
-                        if ui.button(format!("{}", face.name())).clicked() {
-                            self.apply_move(Move::new(face, true, false));
+                        let enabled = !busy;
+                        if ui
+                            .add_enabled(enabled, egui::Button::new(face.name()))
+                            .clicked()
+                        {
+                            self.enqueue_move(Move::new(face, true, false));
                         }
-                        if ui.button(format!("{}'", face.name())).clicked() {
-                            self.apply_move(Move::new(face, false, false));
+                        if ui
+                            .add_enabled(enabled, egui::Button::new(format!("{}'", face.name())))
+                            .clicked()
+                        {
+                            self.enqueue_move(Move::new(face, false, false));
                         }
                     }
                 });
@@ -242,8 +294,11 @@ impl eframe::App for CubeApp {
                 ui.horizontal(|ui| {
                     ui.label("180°:");
                     for face in Face::ALL {
-                        if ui.button(format!("{}2", face.name())).clicked() {
-                            self.apply_move(Move::new(face, true, true));
+                        if ui
+                            .add_enabled(!busy, egui::Button::new(format!("{}2", face.name())))
+                            .clicked()
+                        {
+                            self.enqueue_move(Move::new(face, true, true));
                         }
                     }
                 });
@@ -253,8 +308,8 @@ impl eframe::App for CubeApp {
                 // 公式输入
                 ui.horizontal(|ui| {
                     ui.label("公式:");
-                    ui.text_edit_singleline(&mut self.formula_input);
-                    if ui.button("▶ 执行").clicked() {
+                    ui.add_enabled(!busy, egui::TextEdit::singleline(&mut self.formula_input));
+                    if ui.add_enabled(!busy, egui::Button::new("▶ 执行")).clicked() {
                         self.run_formula();
                     }
                 });
@@ -280,7 +335,7 @@ impl eframe::App for CubeApp {
                     ui.separator();
                     ui.label("打乱步数:");
                     ui.add(egui::DragValue::new(&mut self.scramble_count).range(1..=100));
-                    if ui.button("🔀 打乱").clicked() {
+                    if ui.add_enabled(!busy, egui::Button::new("🔀 打乱")).clicked() {
                         self.scramble();
                     }
                 });
