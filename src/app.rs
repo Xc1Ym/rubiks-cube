@@ -1,7 +1,8 @@
 use crate::cube::moves::{parse_moves, scramble_moves, Face, Move};
 use crate::cube::Cube;
+use crate::renderer::RotationAnim;
 use crate::renderer::view_2d::NetRenderer;
-use crate::renderer::view_3d::{RotationAnim, View3D};
+use crate::renderer::view_3d::View3D;
 use egui::{Color32, RichText};
 
 /// 动画状态 —— 支持单步旋转插值动画
@@ -252,12 +253,12 @@ impl eframe::App for CubeApp {
                 ui.vertical(|ui| {
                     ui.label("2D 展开图（点击色块选择面）");
                     if self.animation.is_none() {
-                        if let Some(click) = self.net_renderer.show(ui, &self.cube) {
+                        if let Some(click) = self.net_renderer.show(ui, &self.cube, None) {
                             self.enqueue_move(Move::new(click.face, true, false));
                         }
                     } else {
                         // 动画期间只显示，不响应点击
-                        self.net_renderer.show(ui, &self.cube);
+                        self.net_renderer.show(ui, &self.cube, current_rotation);
                     }
                 });
             });
@@ -356,7 +357,11 @@ impl eframe::App for CubeApp {
     }
 }
 
-/// 尝试从系统路径加载中文字体并注入 egui
+/// 尝试从系统路径加载中文字体并注入 egui。
+///
+/// 说明：egui 的 `FontDefinitions::default()` 已经包含了内嵌的默认西文字体
+/// （如 Comfortaa、ProggyClean 等）。我们在此基础上追加中文字体作为 fallback，
+/// 因此不会覆盖或丢失任何原有字体配置。
 fn load_chinese_font(ctx: &egui::Context) {
     let font_paths: [&str; 8] = [
         // macOS
@@ -374,13 +379,17 @@ fn load_chinese_font(ctx: &egui::Context) {
 
     for path in &font_paths {
         if let Ok(font_data) = std::fs::read(path) {
+            // default() 已包含 egui 内嵌的默认西文字体，不会丢失
             let mut fonts = egui::FontDefinitions::default();
-            // 将中文字体作为 "chinese" 字体源插入
+
+            // 将中文字体作为独立的 "chinese" 字体源插入
             fonts.font_data.insert(
                 "chinese".to_owned(),
                 egui::FontData::from_owned(font_data).into(),
             );
-            // 将 "chinese" 添加到 Proportional 和 Monospace 的 fallback 中
+
+            // 把 "chinese" 追加到 Proportional / Monospace 的 fallback 列表末尾。
+            // 渲染时会先尝试默认西文字体，找不到对应字形时再 fallback 到中文字体。
             fonts
                 .families
                 .entry(egui::FontFamily::Proportional)
@@ -391,6 +400,7 @@ fn load_chinese_font(ctx: &egui::Context) {
                 .entry(egui::FontFamily::Monospace)
                 .or_default()
                 .push("chinese".to_owned());
+
             ctx.set_fonts(fonts);
             return;
         }
@@ -398,5 +408,8 @@ fn load_chinese_font(ctx: &egui::Context) {
 
     // 若都未找到，打印警告但程序仍继续运行（英文可正常显示）
     eprintln!("警告: 未找到系统中文字体文件，中文可能显示为方框");
-    eprintln!("请尝试安装 Noto Sans CJK 或 WenQuanYi ZenHei 字体");
+    eprintln!("请尝试安装以下字体之一:");
+    eprintln!("  - macOS: PingFang (苹方)、Hiragino Sans GB (冬青黑体)");
+    eprintln!("  - Linux: WenQuanYi ZenHei (文泉驿正黑)");
+    eprintln!("  - Windows: Microsoft YaHei (微软雅黑)、SimHei (黑体)");
 }

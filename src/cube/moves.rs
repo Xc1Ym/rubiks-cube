@@ -127,6 +127,7 @@ pub fn scramble_moves(count: usize) -> Vec<Move> {
 }
 
 /// 逆向操作序列
+#[allow(dead_code)]
 pub fn inverse_moves(moves: &[Move]) -> Vec<Move> {
     moves
         .iter()

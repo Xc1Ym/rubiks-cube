@@ -1,13 +1,7 @@
 use crate::cube::Cube;
 use crate::cube::moves::Face;
+use crate::renderer::RotationAnim;
 use egui::{Color32, Pos2, Sense, Shape, Ui, Vec2};
-
-/// 当前正在进行的旋转动画状态
-#[derive(Clone, Copy, Debug)]
-pub struct RotationAnim {
-    pub face: Face,
-    pub angle: f32, // 当前旋转角度（弧度），从 0 到目标角度
-}
 
 /// 3D 视图渲染器
 pub struct View3D {
@@ -194,7 +188,7 @@ impl View3D {
         let iz = (pos.z + 1.5) as usize;
 
         // 辅助函数：定义面的局部偏移，并在需要时应用动画旋转
-        let mut push_face = |face: Face, should_show: bool, offsets: [Vec3; 4], color_idx_fn: fn(&Cube, usize, usize, usize) -> crate::cube::Color| {
+        let mut push_face = |_face: Face, should_show: bool, offsets: [Vec3; 4], color_idx_fn: fn(&Cube, usize, usize, usize) -> crate::cube::Color| {
             if !should_show {
                 return;
             }

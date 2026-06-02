@@ -1,15 +1,11 @@
 pub mod view_2d;
 pub mod view_3d;
 
-use egui::{Color32, Rect};
+use crate::cube::moves::Face;
 
-/// 绘制一个带边框的色块矩形
-pub fn draw_sticker(
-    painter: &egui::Painter,
-    rect: Rect,
-    color: Color32,
-    stroke_width: f32,
-) {
-    painter.rect_filled(rect, 2.0, color);
-    painter.rect_stroke(rect, 2.0, egui::Stroke::new(stroke_width, Color32::BLACK));
+/// 当前正在进行的旋转动画状态（3D/2D 共用）
+#[derive(Clone, Copy, Debug)]
+pub struct RotationAnim {
+    pub face: Face,
+    pub angle: f32, // 当前旋转角度（弧度），从 0 到目标角度
 }

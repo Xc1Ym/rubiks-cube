@@ -30,6 +30,7 @@ impl Color {
         egui::Color32::from_rgb(r, g, b)
     }
 
+    #[allow(dead_code)]
     pub fn from_face(face: Face) -> Self {
         match face {
             Face::U => Color::White,
@@ -76,6 +77,7 @@ impl Cube {
         &self.faces[face as usize]
     }
 
+    #[allow(dead_code)]
     pub fn get_face_mut(&mut self, face: Face) -> &mut FaceColors {
         &mut self.faces[face as usize]
     }
@@ -123,6 +125,7 @@ impl Cube {
     }
 
     /// 执行一系列 Move
+    #[allow(dead_code)]
     pub fn apply_moves(&mut self, moves: &[Move]) {
         for mv in moves {
             self.apply_move(mv);
